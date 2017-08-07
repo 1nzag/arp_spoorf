@@ -108,3 +108,7 @@ struct packet_list* POP_packet(struct distribute_packet* list, int id);
 struct packet_list* CREATE_packet(u_char* pointer, uint32_t size);
 #endif
 
+#ifndef __MACtos_h__
+#define __MACtos_h__
+char* MACtos(uint8_t MAC[6]);
+#endif
