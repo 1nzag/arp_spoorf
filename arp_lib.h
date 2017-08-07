@@ -16,6 +16,7 @@
 struct packet_list
 {
 	u_char* data;
+	uint32_t size;
 	struct packet_list* next;
 };
 
@@ -104,6 +105,6 @@ struct packet_list* POP_packet(struct distribute_packet* list, int id);
 
 #ifndef __CREATE_packet_h__
 #define __CREATE_pakcet_h__
-struct packet_list* CREATE_packet(u_char* pointer, int size);
+struct packet_list* CREATE_packet(u_char* pointer, uint32_t size);
 #endif
 

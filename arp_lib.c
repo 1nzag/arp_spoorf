@@ -23,12 +23,13 @@ struct __attribute__((packed)) rs_packet
 //////////////////////////////////////
 
 
-struct packet_list* CREATE_packet(u_char* pointer, int size)
+struct packet_list* CREATE_packet(u_char* pointer, uint32_t size)
 {
 	struct packet_list *tmp;
 	tmp = (struct packet_list*)malloc(sizeof(struct packet_list));
 	tmp->data = (u_char*)malloc(sizeof(size));
 	memcpy(tmp->data, pointer, size);
+	tmp->size = size;
 	tmp->next = NULL;
 	return tmp;
 }
@@ -266,9 +267,8 @@ void spoofing(void* t)// uint8_t target_MAC[6], uint8_t senders_MAC[6], uint8_t 
 		}
 		else if(mod_status)
 		{
-			pcap_sendpacket(handle,(const u_char*)mod_pointer, header->len);
+			pcap_sendpacket(handle,(const u_char*)mod_pointer, packet->size);
 		}
-		
 		destroy_packet(packet);
 	}	
 }
